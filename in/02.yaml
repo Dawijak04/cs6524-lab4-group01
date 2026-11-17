@@ -1,0 +1,4 @@
+# Kalman overrides (see DEFAULTS in mypylibs/kalman.py)
+kf:
+  init_min_speed: 1.0   # the pen moves slowly (~1.5-2 px/frame)
+  reset_min_speed: 1.0

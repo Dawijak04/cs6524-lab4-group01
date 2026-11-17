@@ -27,7 +27,7 @@ DEFAULTS = dict(
     diff_thresh=12,     # grey-level change between frames that counts as motion
     fb_max_err=1.0,     # px, max forward-backward LK error for a track to be trusted
     min_speed=1.0,      # px/frame, slower keypoints are static background
-    min_points=4,       # fewer object keypoints than this -> no measurement (occluded)
+    min_points=10,      # fewer object keypoints than this -> no measurement (occluded or noise)
     cluster_radius=40,  # px, moving keypoints closer than ~2x this belong to the same object
     roi=None,           # [x0, y0, x1, y1] px, only keypoints inside can be the object
 )

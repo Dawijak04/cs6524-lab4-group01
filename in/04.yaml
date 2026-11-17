@@ -1,3 +1,3 @@
 # Optical-flow overrides (see DEFAULTS in mypylibs/optical_flow.py)
 of:
-  roi: [0, 500, 1280, 720]   # shelf band the ball rolls along; excludes the hand and window glare
+  roi: [0, 545, 1280, 720]   # shelf band the ball rolls along; excludes the hand hovering above it
