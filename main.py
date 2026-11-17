@@ -10,7 +10,7 @@ def main():
 
     output_dir.mkdir(exist_ok=True)
 
-    for video_number in range(11, 14):
+    for video_number in range(4, 7):
 
         name = f"{video_number:02d}"
 
