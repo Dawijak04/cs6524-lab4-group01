@@ -109,7 +109,8 @@ def run_kalman(measurements, n_frames, config=None):
     The track starts at the first confirmed measurement (see find_start).
 
     Returns one dict per frame from the first measurement on:
-      frame, predicted (4,), corrected (4,) or None, P (4x4), K (4x4) or None,
+      frame, predicted (4,), corrected (4,) or None, P (4x4, after correction if any),
+      P_pred (4x4, of the prediction), K (4x4) or None,
       measured (bool), rejected (bool, measurement failed the gate),
       reset (bool, filter re-initialised on this measurement).
     """
@@ -128,6 +129,7 @@ def run_kalman(measurements, n_frames, config=None):
         "predicted": kf.statePost.ravel().copy(),
         "corrected": kf.statePost.ravel().copy(),
         "P": kf.errorCovPost.copy(),
+        "P_pred": kf.errorCovPost.copy(),
         "K": None,
         "measured": True,
         "rejected": False,
@@ -141,6 +143,7 @@ def run_kalman(measurements, n_frames, config=None):
             "predicted": predicted,
             "corrected": None,
             "P": kf.errorCovPre.copy(),
+            "P_pred": kf.errorCovPre.copy(),
             "K": None,
             "measured": False,
             "rejected": False,

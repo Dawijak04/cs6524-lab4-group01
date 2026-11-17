@@ -6,6 +6,8 @@ import yaml
 from pathlib import Path
 from mypylibs.optical_flow import calculate_optical_flow
 from mypylibs.kalman import run_kalman
+from mypylibs.occlusion import split_trajectories
+from mypylibs.trajectory_video import render_trajectories
 
 
 def save_track(track, path):
@@ -36,6 +38,8 @@ def main():
     output_dir = Path("out")
 
     output_dir.mkdir(exist_ok=True)
+
+    summary = []
 
     for video_number in range(1, 7):
 
@@ -78,6 +82,46 @@ def main():
             f"{len(track) - corrected} prediction-only frames"
         )
         print(f"Saved: {output_path}")
+
+        # Occlusion: compare the prediction with the object once it is back, and
+        # split into the real trajectory and the one the filter would have kept
+        split = split_trajectories(
+            track, measurements, n_frames,
+            config.get("occlusion"), config.get("kf")
+        )
+
+        tr_path = output_dir / f"{name}_tr.mp4"
+        render_trajectories(
+            str(input_path), str(tr_path),
+            track, measurements, split, config.get("tr")
+        )
+
+        if split and split["errors"]:
+            e = split["errors"]
+            summary.append({
+                "video": name,
+                "hidden": split["hidden"],
+                "reappear": e["frame"],
+                "hidden_frames": e["frame"] - split["hidden"],
+                "pos_error_px": round(e["pos_error"], 1),
+                "sigma": round(e["sigma"], 2),
+                "vel_error_px_per_frame": round(e["vel_error"], 2),
+                "mean_ghost_error_px": None if e["mean_ghost_error"] is None else round(e["mean_ghost_error"], 1),
+            })
+            print(
+                f"  occluded {split['hidden']}-{e['frame'] - 1}, "
+                f"prediction error at reappearance {e['pos_error']:.0f} px "
+                f"({e['sigma']:.1f} sigma), velocity error {e['vel_error']:.1f} px/frame"
+            )
+        else:
+            print("  no occlusion with reappearance found")
+        print(f"Saved: {tr_path}")
+
+    if summary:
+        with open(output_dir / "reappearance.csv", "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=list(summary[0]))
+            writer.writeheader()
+            writer.writerows(summary)
 
 
 if __name__ == "__main__":
