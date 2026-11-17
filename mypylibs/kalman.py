@@ -3,20 +3,33 @@ import numpy as np
 
 
 # State x = [x, y, vx, vy] in px and px/frame (constant-velocity model, dt = 1 frame).
-# Measurement z = [x, y, vx, vy]: optical flow gives both position and velocity.
+# Measurement z = [x, y, vx, vy] (optical flow gives both position and velocity),
+# or z = [x, y] with measure_velocity off.
 DEFAULTS = dict(
+    measure_velocity=True,  # correct velocity with the optical flow too, not only position
     accel_std=0.5,       # px/frame^2, unmodelled acceleration (friction, bumps, pushes) -> Q
     min_pos_std=2.0,     # px, floor on measurement position noise -> R
     min_vel_std=0.5,     # px/frame, floor on measurement velocity noise -> R
     init_pos_std=10.0,   # px, extra initial position uncertainty -> P0
     init_vel_std=5.0,    # px/frame, extra initial velocity uncertainty -> P0
-    gate=18.47,          # chi-square (4 dof, 99.9%) gate on the innovation; None disables
+    gate=0.999,          # chi-square gate on the innovation at this probability; None disables
     init_frames=3,       # consecutive consistent measurements needed to start the track
     init_min_speed=5.0,  # px/frame, slower motion (jitter, hands settling) cannot start a track
     init_vel_tol=3.0,    # px/frame, max velocity change between frames while starting
     reset_after=3,       # consecutive gated-out but mutually consistent measurements that re-start the track
     reset_min_speed=2.0, # px/frame, slower rejected measurements never re-start the track
 )
+
+
+# Chi-square quantiles for the gate, by measurement size (degrees of freedom)
+CHI2 = {
+    0.99: {2: 9.21, 4: 13.28},
+    0.999: {2: 13.82, 4: 18.47},
+}
+
+
+def measurement_size(cfg):
+    return 4 if cfg["measure_velocity"] else 2
 
 
 def transition_matrix():
@@ -40,22 +53,28 @@ def process_noise(accel_std):
 
 
 def measurement_noise(m, cfg):
-    """R from the spread of the object's keypoints in this frame.
+    """R from the noise the optical flow reports for this measurement.
 
-    The error is not independent per keypoint (it depends on which part of the
-    object happens to have corners), so the spread is used as-is, not divided by
-    sqrt(n). The floors stop R collapsing when only a few points agree by chance.
+    Position: the pooled centre's own residual noise once it has history, before
+    that the spread of the keypoints. The keypoint error is not independent per
+    point (it depends on which part of the object has corners), so the spread is
+    not divided by sqrt(n). Velocity: the spread of the keypoint flow. The floors
+    stop R collapsing when only a few points agree by chance.
     """
     std = np.array([
         max(m["sx"], cfg["min_pos_std"]),
         max(m["sy"], cfg["min_pos_std"]),
         max(m["svx"], cfg["min_vel_std"]),
         max(m["svy"], cfg["min_vel_std"]),
-    ], np.float32)
+    ], np.float32)[:measurement_size(cfg)]
     return np.diag(std ** 2).astype(np.float32)
 
 
-def as_vector(m):
+def as_vector(m, cfg):
+    return np.array([[m["x"]], [m["y"]], [m["vx"]], [m["vy"]]], np.float32)[:measurement_size(cfg)]
+
+
+def state_vector(m):
     return np.array([[m["x"]], [m["y"]], [m["vx"]], [m["vy"]]], np.float32)
 
 
@@ -84,9 +103,10 @@ def find_start(measurements, cfg):
 
 def create_kalman(first, cfg):
     """Build a cv.KalmanFilter initialised on the first optical flow measurement."""
-    kf = cv.KalmanFilter(4, 4)
+    dims = measurement_size(cfg)
+    kf = cv.KalmanFilter(4, dims)
     kf.transitionMatrix = transition_matrix()
-    kf.measurementMatrix = np.eye(4, dtype=np.float32)
+    kf.measurementMatrix = np.eye(4, dtype=np.float32)[:dims]
     kf.processNoiseCov = process_noise(cfg["accel_std"])
     kf.measurementNoiseCov = measurement_noise(first, cfg)
 
@@ -99,7 +119,7 @@ def create_kalman(first, cfg):
         first["svy"] ** 2 + cfg["init_vel_std"] ** 2,
     ], np.float32)
     kf.errorCovPost = np.diag(init).astype(np.float32)
-    kf.statePost = as_vector(first)
+    kf.statePost = state_vector(first)
     return kf
 
 
@@ -152,7 +172,7 @@ def run_kalman(measurements, n_frames, config=None):
 
         m = by_frame.get(frame)
         if m is not None:
-            z = as_vector(m)
+            z = as_vector(m, cfg)
             R = measurement_noise(m, cfg)
 
             # Reject measurements that are implausible given the prediction
@@ -162,7 +182,7 @@ def run_kalman(measurements, n_frames, config=None):
             S = kf.measurementMatrix @ kf.errorCovPre @ kf.measurementMatrix.T + R
             d2 = (y.T @ np.linalg.inv(S) @ y).item()
 
-            if cfg["gate"] is None or d2 <= cfg["gate"]:
+            if cfg["gate"] is None or d2 <= CHI2[cfg["gate"]][len(z)]:
                 kf.measurementNoiseCov = R
                 corrected = kf.correct(z).ravel().copy()
                 step.update(

@@ -28,7 +28,8 @@ def save_track(track, path):
                 *[v if v == "" else f"{v:.2f}" for v in corrected],
                 *[f"{v:.2f}" for v in t["P"].diagonal()],
                 "" if K is None else f"{K[0, 0]:.3f}",
-                "" if K is None else f"{K[2, 2]:.3f}",
+                # velocity gain: from the velocity innovation, or from position if velocity is not measured
+                "" if K is None else f"{K[2, 2] if K.shape[1] == 4 else K[2, 0]:.3f}",
             ])
 
 
