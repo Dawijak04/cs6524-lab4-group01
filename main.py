@@ -1,26 +1,33 @@
 
-import yaml
+from pathlib import Path
+from mypylibs.optical_flow import calculate_optical_flow
 
-from PIL import Image
-from os import path as opath
 
-ROOT_IN = 'in'
-ROOT_OUT = 'out'
-EXT = 'png'
+def main():
 
-def main(case: int):
+    input_dir = Path("in")
+    output_dir = Path("out")
 
-    img = Image.open(opath.join(ROOT_IN, f'{case:02}.{EXT}'))
-    with open(opath.join(ROOT_IN, f'{case:02}.yaml')) as f:
-        params = yaml.safe_load(f)
-    
+    output_dir.mkdir(exist_ok=True)
 
-if __name__ == '__main__':
+    for video_number in range(11, 14):
 
-    case = 0
-    while(True):
-        case += 1
-        try:
-            main(case)
-        except FileNotFoundError:
-            break
+        name = f"{video_number:02d}"
+
+        input_path = input_dir / f"{name}.mp4"
+        output_path = output_dir / f"{name}_of.mp4"
+
+        measurements = calculate_optical_flow(
+            str(input_path),
+            str(output_path)
+        )
+
+        print(
+            f"Video {name}: "
+            f"{len(measurements)} measurements"
+        )
+        print(f"Saved: {output_path}")
+
+
+if __name__ == "__main__":
+    main()
